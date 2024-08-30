@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+    "net"
 	"os"
 	"sync"
 
@@ -33,7 +34,16 @@ const intro = `
 `</node> `
 
 func main() {
-    conn, err := dbus.ConnectSessionBus()
+    if len(os.Args) < 2 {
+        log.Fatalf("Correct Usage: $ %s DBusTCPAddress", os.Args[0])
+    }
+
+    host, port, err := net.SplitHostPort(os.Args[1])
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    conn, err := dbus.Connect("tcp:host=" + host + ",port=" + port, dbus.WithAuth(dbus.AuthAnonymous()))
     if err != nil {
         log.Fatal(err)
     }

@@ -7,6 +7,7 @@ import (
     "hash/adler32"
     "io"
     "log"
+    "net"
     "os"
     "time"
 
@@ -16,9 +17,7 @@ import (
 )
 
 func hashGenerator(x string) (uint32) {
-    return adler32.Checksum([]byte(x))
-}
-
+    return adler32.Checksum([]byte(x)) }
 func retrieveInputs(fd *os.File) ([]string, []uint32, error) {
     var prompts []string
     var promptHashes []uint32
@@ -74,7 +73,16 @@ func writeToFile(data *datamodel.RequestData, file *os.File) (error) {
 }
 
 func main() {
-    conn, err := dbus.ConnectSessionBus()
+    if len(os.Args) < 4 {
+        log.Fatalf("Correct Usage: $ %s /path/to/input/file /path/to/output/file DBusTCPAddress", os.Args[0])
+    }
+
+    host, port, err := net.SplitHostPort(os.Args[3])
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    conn, err := dbus.Connect("tcp:host=" + host + ",port=" + port, dbus.WithAuth(dbus.AuthAnonymous()))
     if err != nil {
         log.Fatal(err)
     }
@@ -82,10 +90,6 @@ func main() {
 
     obj := conn.Object("com.github.bediharoon.ServLLM", "/com/github/bediharoon/ServLLM")
 
-
-    if len(os.Args) < 3 {
-        log.Fatalln("Correct Usage: $ ./client /path/to/input/file /path/to/output/file")
-    }
 
     inputFilePath := os.Args[1]
     outputFilePath := os.Args[2]
@@ -119,6 +123,7 @@ func main() {
             log.Println("Error Generating Hash, Omitting: ", err)
             hash = 0
         }
+
 
         for _, f := range requiredPromptHashes {
             if hash == f {
@@ -190,5 +195,6 @@ func main() {
         if err != nil {
             log.Fatal(err)
         }
+
     }
 }
