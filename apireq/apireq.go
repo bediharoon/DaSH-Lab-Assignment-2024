@@ -1,8 +1,9 @@
 package apireq
 
 import (
-    "net/http"
+    "encoding/json"
     "io"
+    "net/http"
 )
 
 var (
@@ -30,5 +31,11 @@ func LLMRequest(payload io.Reader, requestToken string) (string, error) {
         return "", err
     }
 
-    return string(result), nil
+    resultStructure := make([]map[string]string, 1)
+    err = json.Unmarshal(result, &resultStructure)
+    if err != nil {
+        return "", err
+    }
+
+    return resultStructure[0]["generated_text"], nil
 }

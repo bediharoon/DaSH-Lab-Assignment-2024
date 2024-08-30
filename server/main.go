@@ -1,55 +1,78 @@
 package main
 
 import (
-    "bytes"
-    "log"
+	"log"
+	"os"
+	"sync"
 
-    "github.com/bediharoon/dashassign/apireq"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 )
 
 const intro = `
 <node>
-	<interface name="com.github.bediharoon.servllm">
-		<method name="servreq">
-			<arg direction="out" type="s"/>
-		</method>
-	</interface>` + introspect.IntrospectDataString +
+    <interface name="com.github.bediharoon.ServLLM">
+        <method name="RegisterHashes">
+            <arg direction="in" type="ax"/>
+            <arg direction="out" type="ax"/>
+            <arg direction="out" type="x"/>
+        </method>
+        <method name="PromptRequest">
+            <arg direction="in" type="ax"/>
+        </method>
+        <method name="WriteCheck">
+            <arg direction="in" type="x"/>
+        </method>
+        <method name="WriteFail">
+            <arg direction="in" type="x"/>
+        </method>
+        <signal name="NewResponse">
+            <arg direction="out" type="(ssxxsxx)"/>
+        </signal>
+    </interface>` + introspect.IntrospectDataString + 
 `</node> `
 
-type BaseNode int 
+func main() {
+    conn, err := dbus.ConnectSessionBus()
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer conn.Close()
 
-func (base BaseNode) GetResp(inp []byte, reqToken string) (string, *dbus.Error) {
-
-    retOut, err := apireq.LLMRequest(bytes.NewReader(inp), reqToken)
-    if (err != nil) {
-        return "", dbus.MakeFailedError(err)
+    if os.Getenv("HUG_API") == "" {
+        log.Fatal(`Missing API Key, Use:
+        $ export HUG_API="<YourTokenHere>"`)
     }
 
-    return retOut, nil
-}
+    var staticDataMutex sync.Mutex
+    var preServedHashes []uint32
+    var clientSerials []int64
+    var currentIndex int
+    apikey:= os.Getenv("HUG_API")
+    successChan := make(chan int64)
+    errorChan := make(chan int64)
+    staticData := serverData{
+        mutex: &staticDataMutex,
+        servedHashes: &preServedHashes,
+        userSerial: &clientSerials,
+        APIKey: &apikey,
+        roundIndex: &currentIndex,
+        connection: conn,
+        writeChan: &successChan,
+        errChan: &errorChan,
+    }
+    conn.Export(staticData, "/com/github/bediharoon/ServLLM", "com.github.bediharoon.ServLLM")
+    conn.Export(introspect.Introspectable(intro), "com/github/bediharoon/ServLLM", "org.freedesktop.DBus.Introspectable")
 
-func main() {
-	conn, err := dbus.ConnectSessionBus()
-	if err != nil {
+    reply, err := conn.RequestName("com.github.bediharoon.ServLLM", dbus.NameFlagDoNotQueue)
+    if err != nil {
         log.Fatal(err)
-	}
-	defer conn.Close()
+    }
 
-    var base BaseNode
+    if reply != dbus.RequestNameReplyPrimaryOwner {
+        log.Fatalln("Name already taken")
+    }
 
-	conn.Export(base, "/com/github/bediharoon/servllm", "com.github.bediharoon.ServLLM")
-	conn.Export(introspect.Introspectable(intro), "/com/github/bediharoon/servllm", "org.freedesktop.DBus.Introspectable")
-
-	reply, err := conn.RequestName("com.github.bediharoon.ServLLM", dbus.NameFlagReplaceExisting)
-	if err != nil {
-		panic(err)
-	}
-	if reply != dbus.RequestNameReplyPrimaryOwner {
-        log.Panicln("Name Already Taken")
-	}
-
-	log.Println("Listening on com.github.bediharoon.ServLLM")
-	select {}
+    log.Println("Listening on com.github.bediharoon.ServLLM")
+    select { }
 }
