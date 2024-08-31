@@ -1,4 +1,4 @@
 .env
-token.env
-input.txt
-output.json
+client/input.txt
+client/bin/
+server/bin/
